@@ -15,9 +15,11 @@ import net.minecraft.util.hit.HitResult;
 public class SimpleXrayClient implements ClientModInitializer {
 	private static final KeyBinding OPEN_CONFIG_KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 			"key.xraymod.open_config",
-			InputUtil.GLFW_KEY_V, // unbound by default; player sets it in Controls
+			InputUtil.GLFW_KEY_V,
 			"category.xraymod"
 	));
+	// Add-block key ships unbound — it's a secondary convenience shortcut and V is already
+	// a visible default, so we don't want to stomp a key the player may already use.
 	private static final KeyBinding ADD_LOOKED_AT_BLOCK_KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 			"key.xraymod.add_looked_at_block",
 			InputUtil.UNKNOWN_KEY.getCode(),
@@ -26,6 +28,8 @@ public class SimpleXrayClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		// Order matters: XrayConfig must be loaded before XrayBlockCache.register() subscribes
+		// to CHUNK_LOAD — chunks can start loading immediately and will query XrayConfig.
 		XrayConfig.load();
 		XrayBlockCache.register();
 		XrayRenderer.register();
@@ -36,7 +40,9 @@ public class SimpleXrayClient implements ClientModInitializer {
 			}
 
 			while (ADD_LOOKED_AT_BLOCK_KEY.wasPressed()) {
-				if (client.currentScreen == null) { // see note below
+				// Guard against a screen being open: crosshairTarget isn't updated while
+				// the player's cursor is in a GUI, so the result would be stale/wrong.
+				if (client.currentScreen == null) {
 					addLookedAtBlock(client);
 				}
 			}

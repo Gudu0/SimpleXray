@@ -21,6 +21,8 @@ import java.util.Map;
 
 public class XrayConfig {
 
+    // Fixed 8-entry palette; color is picked by cycling an index, not a real color picker.
+    // See CLAUDE.md "Known limitations" if a proper picker is ever wanted — it's a non-trivial UI addition.
     public static final int[] COLOR_PALETTE = {
             0xFFFF5555, 0xFFFFAA00, 0xFFFFFF55, 0xFF55FF55,
             0xFF55FFFF, 0xFF5555FF, 0xFFFF55FF, 0xFFFFFFFF
@@ -29,6 +31,8 @@ public class XrayConfig {
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("xraymod.json");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    // LinkedHashMap preserves insertion order so the "Enabled" panel shows blocks in the
+    // order the player added them, not an arbitrary map order.
     private static final Map<Block, Integer> ENABLED_BLOCKS = new LinkedHashMap<>();
 
     public static List<Block> getEnabledBlocks() {
@@ -42,13 +46,15 @@ public class XrayConfig {
     public static void addBlock(Block block) {
         ENABLED_BLOCKS.putIfAbsent(block, 0);
         save();
+        // Full rescan needed: the new block type may already appear in chunks that were
+        // scanned before it was added, so those chunks' cache entries are stale.
         XrayBlockCache.rescanLoadedChunks();
     }
 
     public static void removeBlock(Block block) {
         ENABLED_BLOCKS.remove(block);
         save();
-        XrayBlockCache.rescanLoadedChunks();
+        XrayBlockCache.rescanLoadedChunks(); // same reason as addBlock
     }
 
     public static int getColor(Block block) {
@@ -59,6 +65,7 @@ public class XrayConfig {
         int current = ENABLED_BLOCKS.getOrDefault(block, 0);
         ENABLED_BLOCKS.put(block, (current + 1) % COLOR_PALETTE.length);
         save();
+        // No cache rescan — color doesn't affect which positions are cached, only how they render.
     }
 
     private static class ConfigData {
@@ -79,6 +86,7 @@ public class XrayConfig {
                 Block block = Registries.BLOCK.get(id);
                 if (block == Blocks.AIR) continue; // saved block no longer exists (e.g. mod removed) — skip it
 
+                // clamp guards against a hand-edited JSON with an out-of-range index
                 int colorIndex = MathHelper.clamp(entry.getValue(), 0, COLOR_PALETTE.length - 1);
                 ENABLED_BLOCKS.put(block, colorIndex);
             }
@@ -88,6 +96,9 @@ public class XrayConfig {
     }
 
     private static void save() {
+        // Writes on every mutation rather than on shutdown so a crash mid-session doesn't
+        // lose changes. The tradeoff (extra disk I/O) is acceptable because mutations are
+        // rare, user-driven actions — not a hot path.
         ConfigData data = new ConfigData();
         for (Map.Entry<Block, Integer> entry : ENABLED_BLOCKS.entrySet()) {
             data.blocks.put(Registries.BLOCK.getId(entry.getKey()).toString(), entry.getValue());

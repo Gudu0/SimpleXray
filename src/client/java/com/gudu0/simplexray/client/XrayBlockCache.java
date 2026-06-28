@@ -18,12 +18,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class XrayBlockCache {
 
+    // Both pos and block are stored so the renderer can look up the color (keyed on Block)
+    // without a per-frame world lookup for each cached position.
     public record CachedBlock(BlockPos pos, Block block) {}
 
+    // ConcurrentHashMap because the renderer reads CACHE on the render thread while chunk
+    // load/unload events fire on the client tick thread.
     private static final Map<ChunkPos, List<CachedBlock>> CACHE = new ConcurrentHashMap<>();
 
     public static void register() {
-        ClientChunkEvents.CHUNK_LOAD.register((world, chunk) -> scanChunk(world, chunk));
+        ClientChunkEvents.CHUNK_LOAD.register(XrayBlockCache::scanChunk);
         ClientChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> CACHE.remove(chunk.getPos()));
     }
 
@@ -31,8 +35,8 @@ public class XrayBlockCache {
         return CACHE.values();
     }
 
-    // call this whenever the enabled-block list changes — a newly added block type
-    // needs to be found in chunks that were already scanned under the old list
+    // Called whenever the enabled-block list changes — a newly added block type may already
+    // appear in chunks that were scanned under the old list and won't be in the cache yet.
     public static void rescanLoadedChunks() {
         MinecraftClient client = MinecraftClient.getInstance();
         ClientWorld world = client.world;
@@ -56,6 +60,8 @@ public class XrayBlockCache {
         ChunkPos pos = chunk.getPos();
         List<CachedBlock> matches = new ArrayList<>();
 
+        // getBottomY/getTopY account for the dimension's actual build limits (e.g. -64 in
+        // the overworld) rather than hard-coding 0–256, which would miss deepslate-level ores.
         int minY = world.getBottomY();
         int maxY = world.getTopY();
 
@@ -71,6 +77,8 @@ public class XrayBlockCache {
             }
         }
 
+        // Remove the entry entirely when empty so getAllMatches() never hands the renderer
+        // an empty list to iterate — keeps the render loop tight.
         if (matches.isEmpty()) {
             CACHE.remove(pos);
         } else {
@@ -80,6 +88,8 @@ public class XrayBlockCache {
 
     public static void onBlockChanged(BlockPos pos, Block newBlock) {
         ChunkPos chunkPos = new ChunkPos(pos);
+        // computeIfAbsent creates the list only if this chunk has no cache entry yet
+        // (e.g. an xray block was just placed in a chunk that previously had none).
         List<CachedBlock> matches = CACHE.computeIfAbsent(chunkPos, p -> new ArrayList<>());
         matches.removeIf(cb -> cb.pos().equals(pos));
 
@@ -88,7 +98,7 @@ public class XrayBlockCache {
         }
 
         if (matches.isEmpty()) {
-            CACHE.remove(chunkPos);
+            CACHE.remove(chunkPos); // same empty-list cleanup as scanChunk
         }
     }
 }
