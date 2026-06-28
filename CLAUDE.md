@@ -39,7 +39,7 @@ limitations / not yet built" below for what's deliberately been left out so far.
 | `XrayRenderer`                                 | Registers the `WorldRenderEvents.AFTER_ENTITIES` callback; iterates `XrayBlockCache`'s matches each frame and draws a wireframe box per match using the cached per-block color.                                                                                                                                                                                                                        |
 | `net.minecraft.client.render.XrayRenderLayers` | **Lives in vanilla's own package on purpose** — see the gotcha below. Holds the single `OUTLINE` `RenderLayer` constant with depth testing disabled, which is the entire mechanism that makes outlines render through walls.                                                                                                                                                                           |
 | `XrayConfig`                                   | The data model: which blocks are enabled and what color each has (`LinkedHashMap<Block, Integer>` indexing into a fixed 8-color palette). Owns load/save to a JSON file in the Fabric config dir, writing on every mutation rather than on shutdown.                                                                                                                                                   |
-| `XrayBlockCache`                               | Performance layer sitting between `XrayConfig` and the renderer. Caches matched block positions per chunk so the renderer never scans the world directly. Populated on `ClientChunkEvents.CHUNK_LOAD`, fully rescanned on config changes (`addBlock`/`removeBlock`), and incrementally patched on individual block changes via the Mixin below.                                                        |
+| `XrayBlockCache`                               | Performance layer sitting between `XrayConfig` and the renderer. Caches matched block positions per chunk so the renderer never scans the world directly. Populated on `ClientChunkEvents.CHUNK_LOAD`. On `addBlock`, chunks are queued for a tick-spread rescan (10 chunks/tick, nearest-first) rather than blocking synchronously. On `removeBlock`, uses `evictBlock` to filter existing cache entries directly — no world scan needed. Incrementally patched on individual block changes via the Mixin below. |
 | `WorldSetBlockStateMixin`                      | The one Mixin in the project. Injects into `World#setBlockState(BlockPos, BlockState, int, int)` (the 4-arg overload — it's the common funnel point other overloads delegate to), gated to only act when `this instanceof ClientWorld`, and calls `XrayBlockCache.onBlockChanged(...)` so already-cached chunks stay correct after a block is placed/broken rather than only updating on chunk reload. |
 | `XrayConfigScreen`                             | The in-game config UI. See its own header comment for the panel layout; it's been kept fairly heavily commented already since it's the most complex file.                                                                                                                                                                                                                                              |
 | Client initializer (`ClientModInitializer`)    | Calls `XrayRenderer.register()`, `XrayBlockCache.register()`, `XrayConfig.load()` on startup; registers the two keybinds (open config screen, add looked-at block) and polls them in `ClientTickEvents.END_CLIENT_TICK`.                                                                                                                                                                               |
@@ -72,9 +72,13 @@ before refactoring any of them.
   removed, or moved. If inventory-grid dragging (not just the hotbar) is ever added, keep
   this property.
 - **Cache updates are incremental, not full rescans, for single block changes** —
-  `XrayBlockCache.onBlockChanged` patches one chunk's match list in place. Full rescans
-  only happen on chunk load and on config list changes (add/remove a tracked block type),
-  since those are the only cases that can't be resolved by patching a single position.
+  `XrayBlockCache.onBlockChanged` patches one chunk's match list in place. `removeBlock`
+  uses `evictBlock`, which filters the existing cache entries directly (O(cache size), no
+  world scan). `addBlock` needs a world scan — blocks of the new type may exist in chunks
+  that were already scanned — but that scan is spread across ticks via a `scanQueue`
+  (10 chunks/tick, sorted nearest-first) rather than blocking synchronously. The queue is
+  cleared and restarted on each new call, so rapid adds always complete with the correct
+  final enabled-block list.
 - **Persistence writes on every mutation**, not on shutdown, specifically so a crash
   mid-session doesn't lose changes. This is a deliberate tradeoff of a little extra disk
   I/O for safety; it's fine because these are rare, user-driven actions, not a hot path.
@@ -115,10 +119,20 @@ redesigns:
 - **Color is a fixed 8-entry palette you cycle through**, not a real picker. A real
   picker is a meaningfully larger UI component than anything else on the screen so far —
   budget real time for it, don't treat it as a quick add.
-- **Right panel (search results) doesn't truncate long names** — only the left "Enabled"
-  panel got that fix. Same `truncateName` helper would cover it if wanted.
 - **Drag-and-drop only works from the hotbar**, not the full inventory grid (which isn't
   even rendered in this screen yet).
+- **`addBlock` rescans for all enabled blocks, not just the newly added one** — `scanChunk`
+  rebuilds the full match list per chunk. An additive scan (scan only for the new block type,
+  merge into the existing list) would avoid touching already-correct cache entries; not done
+  yet because the iteration cost is the same either way and the tick-spread already hides
+  the latency.
+- **No ChunkSection palette check** — before iterating a section's blocks, we could skip
+  the section entirely if the section's `PalettedContainer` palette doesn't include any
+  enabled block. Big win for ore scanning (most sections are all stone/air). Requires a
+  mixin accessor to `PalettedContainer`; treat as a separate feature.
+- **Debug timing messages are currently live** in `addBlock` and `removeBlock` — they
+  print to chat on every add/remove. Remove `debugMsg` calls and the `ms`/`debugMsg`
+  helpers from `XrayConfig` once profiling is done.
 - **No tag or blockstate-level matching** — everything is keyed on `Block`. Tags match a
   *set* of blocks and would need a second matching pathway; blockstate-level rules (e.g.
   "this ore, but not when waterlogged") are finer-grained than `Block` entirely and would
@@ -144,9 +158,9 @@ Patterns that have worked well so far, worth keeping:
 - When an exact API name/signature can't be confirmed with certainty (Minecraft's client
   rendering internals especially churn release-to-release), say so explicitly and flag
   what to check, rather than presenting a guess as settled fact.
-- Performance tradeoffs (the cache's full-rescan-on-config-change cost, write-on-mutation
-  persistence, etc.) are worth stating out loud even when they're the right call — not
-  just making the choice silently.
+- Performance tradeoffs (tick-spread rescan cost vs. instant eviction on remove,
+  write-on-mutation persistence, etc.) are worth stating out loud even when they're the
+  right call — not just making the choice silently.
 
 ## Things I was unsure about (user filled in)
 

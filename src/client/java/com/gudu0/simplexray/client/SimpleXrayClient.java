@@ -1,5 +1,6 @@
 package com.gudu0.simplexray.client;
 
+import com.gudu0.simplexray.SimpleXray;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -10,9 +11,12 @@ import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
+import org.slf4j.Logger;
 
 
 public class SimpleXrayClient implements ClientModInitializer {
+	Logger logger = SimpleXray.LOGGER;
+
 	private static final KeyBinding OPEN_CONFIG_KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 			"key.xraymod.open_config",
 			InputUtil.GLFW_KEY_V,

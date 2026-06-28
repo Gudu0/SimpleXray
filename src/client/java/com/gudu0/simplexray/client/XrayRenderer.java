@@ -1,5 +1,6 @@
 package com.gudu0.simplexray.client;
 
+import com.gudu0.simplexray.SimpleXray;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
@@ -9,10 +10,12 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
+import org.slf4j.Logger;
 
 import java.util.List;
 
 public class XrayRenderer {
+    Logger logger = SimpleXray.LOGGER;
 
     public static void register() {
         // AFTER_ENTITIES fires after entity rendering but while the world render's vertex

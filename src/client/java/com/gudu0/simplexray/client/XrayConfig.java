@@ -2,12 +2,16 @@ package com.gudu0.simplexray.client;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.gudu0.simplexray.SimpleXray;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.registry.Registries;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
+import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -20,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 public class XrayConfig {
+    Logger logger = SimpleXray.LOGGER;
 
     // Fixed 8-entry palette; color is picked by cycling an index, not a real color picker.
     // See CLAUDE.md "Known limitations" if a proper picker is ever wanted — it's a non-trivial UI addition.
@@ -44,17 +49,44 @@ public class XrayConfig {
     }
 
     public static void addBlock(Block block) {
-        ENABLED_BLOCKS.putIfAbsent(block, 0);
-        save();
+        long t0 = System.nanoTime(); // start time
+
+        boolean blockAlreadyInEnabled = ENABLED_BLOCKS.containsKey(block); // check to make sure we're not trying to readd a block, unnecessary
+        if (!blockAlreadyInEnabled) ENABLED_BLOCKS.put(block, 0);
+        long t1 = System.nanoTime(); // time after puting block in enabled list
+
+        if (!blockAlreadyInEnabled) save();
+        long t2 = System.nanoTime(); // time after saving
         // Full rescan needed: the new block type may already appear in chunks that were
         // scanned before it was added, so those chunks' cache entries are stale.
-        XrayBlockCache.rescanLoadedChunks();
+
+        if (!blockAlreadyInEnabled) XrayBlockCache.rescanLoadedChunks(); // don't rescan if it was already in the list
+        long t3 = System.nanoTime(); // time after rescan
+        debugMsg(String.format("[xray] addBlock — map: %dms  save: %dms  rescan: %dms  total: %dms",
+                ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
     }
 
     public static void removeBlock(Block block) {
+        long t0 = System.nanoTime();
         ENABLED_BLOCKS.remove(block);
+        long t1 = System.nanoTime();
         save();
-        XrayBlockCache.rescanLoadedChunks(); // same reason as addBlock
+        long t2 = System.nanoTime();
+        // Evict rather than rescan — the cache already has every position of this block
+        // type recorded, so we just filter those entries out without touching the world.
+        XrayBlockCache.evictBlock(block);
+        long t3 = System.nanoTime();
+        debugMsg(String.format("[xray] removeBlock — map: %dms  save: %dms  evict: %dms  total: %dms",
+                ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
+    }
+
+    private static long ms(long end, long start) {
+        return (end - start) / 1_000_000;
+    }
+
+    private static void debugMsg(String msg) {
+        var player = MinecraftClient.getInstance().player;
+        if (player != null) player.sendMessage(Text.literal(msg), false);
     }
 
     public static int getColor(Block block) {

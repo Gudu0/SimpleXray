@@ -193,6 +193,7 @@ public class XrayConfigScreen extends Screen {
             }
         }
 
+        // --- Left / Right Panel ---
         if (button == 0) {
 
             // --- Left panel: per-row color swatch / remove button ---

@@ -23,21 +23,50 @@ loom {
 		}
 	}
 }
-dependencies {
-	// To change the versions see the gradle.properties file
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-	// Fabric API. This is technically optional, but you probably want it anyway.
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+def mcVersion = project.findProperty("mcVersion") ?: project.minecraft_version
+println "Building for mcVersion=${mcVersion}"
+
+// Per-version dependency metadata — add an entry here for each version you support
+ext.versionMeta = [
+		"1.20.1": [yarn: "1.20.1+build.10", loader: project.loader_version, fapi: "0.92.9+1.20.1"],
+		"1.20.4": [yarn: "1.20.4+build.3",  loader: project.loader_version, fapi: "0.97.2+1.20.4"],
+		"1.20.6": [yarn: "1.20.6+build.1",  loader: project.loader_version, fapi: "0.100.1+1.20.6"],
+]
+
+def meta = versionMeta[mcVersion]
+if (meta == null) {
+	throw new GradleException("No versionMeta entry for mcVersion=${mcVersion} — add one in build.gradle")
+}
+
+version = "${project.mod_version}+mc${mcVersion}"  // keeps jar filenames distinct per version
+
+sourceSets {
+	main {
+		java {
+			srcDir "versions/${mcVersion}/main/java"
+		}
+	}
+	client {
+		java {
+			srcDir "versions/${mcVersion}/client/java"
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${mcVersion}"
+	mappings "net.fabricmc:yarn:${meta.yarn}:v2"
+	modImplementation "net.fabricmc:fabric-loader:${meta.loader}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${meta.fapi}"
 }
 processResources {
 	def version = project.version
 	inputs.property "version", version
+	inputs.property "mcVersion", mcVersion
 
 	filesMatching("fabric.mod.json") {
-		expand "version": version
+		expand "version": version, "mcVersion": mcVersion
 	}
 }
 tasks.withType(JavaCompile).configureEach {

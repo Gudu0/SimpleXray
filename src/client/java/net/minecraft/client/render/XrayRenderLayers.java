@@ -3,10 +3,15 @@
 // package is the standard workaround to access them without reflection or an access widener.
 package net.minecraft.client.render;
 
+import com.gudu0.simplexray.SimpleXray;
+import org.slf4j.Logger;
+
 import java.util.OptionalDouble;
 
 public final class XrayRenderLayers {
     private XrayRenderLayers() {}
+
+    Logger logger = SimpleXray.LOGGER;
 
     public static final RenderLayer OUTLINE = RenderLayer.of(
             "xray_outline",
