@@ -1,3 +1,5 @@
+// !!IMPORTANT!! 1.20.1 version of the file !!IMPORTANT!!
+
 package com.gudu0.simplexray.client;
 
 import net.minecraft.block.Block;
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
  * Both list panels share the same scroll/clip approach: a fixed-size visible window, plus one
  * extra row that's drawn and then clipped half off, to signal "there's more below, scroll for it."
  */
+
 public class XrayConfigScreen extends Screen {
 
     // ---- Layout constants — tune these to resize/reposition the whole screen ----

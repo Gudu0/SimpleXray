@@ -62,8 +62,7 @@ public class XrayConfig {
 
         if (!blockAlreadyInEnabled) XrayBlockCache.rescanLoadedChunks(); // don't rescan if it was already in the list
         long t3 = System.nanoTime(); // time after rescan
-        debugMsg(String.format("[xray] addBlock — map: %dms  save: %dms  rescan: %dms  total: %dms",
-                ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
+//        debugMsg(String.format("[xray] addBlock — map: %dms  save: %dms  rescan: %dms  total: %dms",ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
     }
 
     public static void removeBlock(Block block) {
@@ -76,8 +75,7 @@ public class XrayConfig {
         // type recorded, so we just filter those entries out without touching the world.
         XrayBlockCache.evictBlock(block);
         long t3 = System.nanoTime();
-        debugMsg(String.format("[xray] removeBlock — map: %dms  save: %dms  evict: %dms  total: %dms",
-                ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
+//        debugMsg(String.format("[xray] removeBlock — map: %dms  save: %dms  evict: %dms  total: %dms",ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
     }
 
     private static long ms(long end, long start) {
