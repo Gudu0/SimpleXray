@@ -6,10 +6,11 @@ A client-side X-ray mod for Fabric. Add any block to your list and see it highli
 
 - **In-game config screen** — open with a keybind, no need to edit files
 - **Add blocks by looking at them** — press the keybind while looking at a block to add it easily
-- **Per-block colors** — each block can get its own color from an 8-color palette
+- **Full RGB color picker** — set any color per block using sliders or a hex code
 - **Search** — filter blocks by name in the config screen
 - **Drag and drop** — drag a block from your hotbar into the config screen to add it
-- **Persistent config** — your block list is saved automatically and survives restarts
+- **Enable/disable toggle** — turn off X-ray without losing your block list
+- **Persistent config** — your block list, colors, and toggle state are saved automatically
 
 ## Installation
 
@@ -36,7 +37,7 @@ Also available on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/simp
 | Keybind             | Default | Action                            |
 |---------------------|---------|-----------------------------------|
 | Open config screen  | `V`     | Opens the block list manager      |
-| Add looked-at block | `Unset` | Adds the block you're pointing at |
+| Add looked-at block | `Z`     | Adds the block you're pointing at |
 
 Both keybinds can be rebound in Minecraft's controls settings.
 

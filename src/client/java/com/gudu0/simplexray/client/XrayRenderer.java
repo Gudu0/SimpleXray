@@ -28,6 +28,8 @@ public class XrayRenderer {
         VertexConsumerProvider consumers = context.consumers();
         if (matrices == null || consumers == null) return;
 
+        if (!XrayConfig.isModEnabled()) return;
+
         ClientWorld world = context.world();
         ClientPlayerEntity player = MinecraftClient.getInstance().player;
         if (world == null || player == null) return;

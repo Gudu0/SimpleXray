@@ -15,3 +15,10 @@ a truncated name for half a second to see the full name in a tooltip.
 
 ### 1.1.1
 - **Removed debug time messages**
+
+### 1.2.0
+- **Per-block RGB color picker** — replaced the 8-color palette with full RGB sliders  
+  and a hex input field in a new Settings panel. Click a block in the Enabled list to    
+  edit its color
+- **Enable Mod toggle** — disable X-ray rendering and scanning without losing your block list;      
+  setting is saved to disk and rescans when you re-enable

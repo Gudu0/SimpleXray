@@ -104,8 +104,8 @@ public class XrayBlockCache {
         ChunkPos pos = chunk.getPos();
         List<CachedBlock> matches = new ArrayList<>();
 
-        // getBottomY/getTopY account for the dimension's actual build limits (e.g. -64 in
-        // the overworld) rather than hard-coding 0–256, which would miss deepslate-level ores.
+        // getBottomY/getTopY account for the dimension's actual build limits (e.g. -64 to 319 in
+        // the overworld) rather than hard-coding.
         int minY = world.getBottomY();
         int maxY = world.getTopY();
 

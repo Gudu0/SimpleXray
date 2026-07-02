@@ -10,7 +10,6 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.math.MathHelper;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -26,8 +25,8 @@ import java.util.Map;
 public class XrayConfig {
     Logger logger = SimpleXray.LOGGER;
 
-    // Fixed 8-entry palette; color is picked by cycling an index, not a real color picker.
-    // See CLAUDE.md "Known limitations" if a proper picker is ever wanted — it's a non-trivial UI addition.
+    // Kept as the migration reference for saves written by the old palette-index format,
+    // and as the default ARGB color for newly added blocks.
     public static final int[] COLOR_PALETTE = {
             0xFFFF5555, 0xFFFFAA00, 0xFFFFFF55, 0xFF55FF55,
             0xFF55FFFF, 0xFF5555FF, 0xFFFF55FF, 0xFFFFFFFF
@@ -40,6 +39,17 @@ public class XrayConfig {
     // order the player added them, not an arbitrary map order.
     private static final Map<Block, Integer> ENABLED_BLOCKS = new LinkedHashMap<>();
 
+    private static boolean modEnabled = true;
+
+    public static boolean isModEnabled() { return modEnabled; }
+
+    public static void setModEnabled(boolean enabled) {
+        modEnabled = enabled;
+        save();
+        // Rescan on re-enable so the cache catches anything added/removed while disabled.
+        if (enabled) XrayBlockCache.rescanLoadedChunks();
+    }
+
     public static List<Block> getEnabledBlocks() {
         return new ArrayList<>(ENABLED_BLOCKS.keySet());
     }
@@ -49,20 +59,20 @@ public class XrayConfig {
     }
 
     public static void addBlock(Block block) {
-        long t0 = System.nanoTime(); // start time
+        long t0 = System.nanoTime();
 
-        boolean blockAlreadyInEnabled = ENABLED_BLOCKS.containsKey(block); // check to make sure we're not trying to readd a block, unnecessary
-        if (!blockAlreadyInEnabled) ENABLED_BLOCKS.put(block, 0);
-        long t1 = System.nanoTime(); // time after puting block in enabled list
+        boolean blockAlreadyInEnabled = ENABLED_BLOCKS.containsKey(block);
+        if (!blockAlreadyInEnabled) ENABLED_BLOCKS.put(block, COLOR_PALETTE[0]);
+        long t1 = System.nanoTime();
 
         if (!blockAlreadyInEnabled) save();
-        long t2 = System.nanoTime(); // time after saving
+        long t2 = System.nanoTime();
+
         // Full rescan needed: the new block type may already appear in chunks that were
         // scanned before it was added, so those chunks' cache entries are stale.
-
-        if (!blockAlreadyInEnabled) XrayBlockCache.rescanLoadedChunks(); // don't rescan if it was already in the list
-        long t3 = System.nanoTime(); // time after rescan
-//        debugMsg(String.format("[xray] addBlock — map: %dms  save: %dms  rescan: %dms  total: %dms",ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
+        if (!blockAlreadyInEnabled && modEnabled) XrayBlockCache.rescanLoadedChunks();
+        long t3 = System.nanoTime();
+//        debugMsg(String.format("[xray] addBlock — map: %dms  save: %dms  rescan: %dms  total: %dms", ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
     }
 
     public static void removeBlock(Block block) {
@@ -73,9 +83,9 @@ public class XrayConfig {
         long t2 = System.nanoTime();
         // Evict rather than rescan — the cache already has every position of this block
         // type recorded, so we just filter those entries out without touching the world.
-        XrayBlockCache.evictBlock(block);
+        if (modEnabled) XrayBlockCache.evictBlock(block);
         long t3 = System.nanoTime();
-//        debugMsg(String.format("[xray] removeBlock — map: %dms  save: %dms  evict: %dms  total: %dms",ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
+//        debugMsg(String.format("[xray] removeBlock — map: %dms  save: %dms  evict: %dms  total: %dms", ms(t1, t0), ms(t2, t1), ms(t3, t2), ms(t3, t0)));
     }
 
     private static long ms(long end, long start) {
@@ -87,19 +97,21 @@ public class XrayConfig {
         if (player != null) player.sendMessage(Text.literal(msg), false);
     }
 
+    /** Returns the full ARGB color stored for this block. */
     public static int getColor(Block block) {
-        return COLOR_PALETTE[ENABLED_BLOCKS.getOrDefault(block, 0)];
+        return ENABLED_BLOCKS.getOrDefault(block, COLOR_PALETTE[0]);
     }
 
-    public static void cycleColor(Block block) {
-        int current = ENABLED_BLOCKS.getOrDefault(block, 0);
-        ENABLED_BLOCKS.put(block, (current + 1) % COLOR_PALETTE.length);
-        save();
-        // No cache rescan — color doesn't affect which positions are cached, only how they render.
+    /** Updates the in-memory color immediately (for live slider preview) without writing to disk. */
+    public static void setColorNoSave(Block block, int argbColor) {
+        if (ENABLED_BLOCKS.containsKey(block)) {
+            ENABLED_BLOCKS.put(block, argbColor);
+        }
     }
 
     private static class ConfigData {
         Map<String, Integer> blocks = new LinkedHashMap<>();
+        Boolean modEnabled = null; // null = absent from file → default true
     }
 
     public static void load() {
@@ -107,6 +119,8 @@ public class XrayConfig {
         try (Reader reader = Files.newBufferedReader(CONFIG_PATH)) {
             ConfigData data = GSON.fromJson(reader, ConfigData.class);
             if (data == null || data.blocks == null) return;
+
+            modEnabled = data.modEnabled == null || data.modEnabled;
 
             ENABLED_BLOCKS.clear();
             for (Map.Entry<String, Integer> entry : data.blocks.entrySet()) {
@@ -116,20 +130,25 @@ public class XrayConfig {
                 Block block = Registries.BLOCK.get(id);
                 if (block == Blocks.AIR) continue; // saved block no longer exists (e.g. mod removed) — skip it
 
-                // clamp guards against a hand-edited JSON with an out-of-range index
-                int colorIndex = MathHelper.clamp(entry.getValue(), 0, COLOR_PALETTE.length - 1);
-                ENABLED_BLOCKS.put(block, colorIndex);
+                int stored = entry.getValue();
+                // Migrate old format: palette indices were stored as 0–7 (small positive ints).
+                // Full ARGB colors have the 0xFF alpha byte set, making them negative as signed ints.
+                int color = (stored >= 0 && stored < COLOR_PALETTE.length)
+                        ? COLOR_PALETTE[stored]
+                        : stored;
+                ENABLED_BLOCKS.put(block, color);
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private static void save() {
+    public static void save() {
         // Writes on every mutation rather than on shutdown so a crash mid-session doesn't
         // lose changes. The tradeoff (extra disk I/O) is acceptable because mutations are
         // rare, user-driven actions — not a hot path.
         ConfigData data = new ConfigData();
+        data.modEnabled = modEnabled;
         for (Map.Entry<Block, Integer> entry : ENABLED_BLOCKS.entrySet()) {
             data.blocks.put(Registries.BLOCK.getId(entry.getKey()).toString(), entry.getValue());
         }

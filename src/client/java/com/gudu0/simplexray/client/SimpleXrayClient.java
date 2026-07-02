@@ -26,7 +26,7 @@ public class SimpleXrayClient implements ClientModInitializer {
 	// a visible default, so we don't want to stomp a key the player may already use.
 	private static final KeyBinding ADD_LOOKED_AT_BLOCK_KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 			"key.xraymod.add_looked_at_block",
-			InputUtil.UNKNOWN_KEY.getCode(),
+			InputUtil.GLFW_KEY_Z,
 			"category.xraymod"
 	));
 
@@ -51,6 +51,7 @@ public class SimpleXrayClient implements ClientModInitializer {
 				}
 			}
 		});
+		logger.info("Thank you for using SimpleXray :)");
 	}
 
 	private static void addLookedAtBlock(MinecraftClient client) {

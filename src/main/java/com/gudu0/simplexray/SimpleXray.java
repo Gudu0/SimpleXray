@@ -23,7 +23,7 @@ public class SimpleXray implements ModInitializer {
 
 
 
-		LOGGER.info("Hello Fabric world!");
+//		LOGGER.info("Hello Fabric world!");
 	}
 
 	public static Identifier id(String path) {
